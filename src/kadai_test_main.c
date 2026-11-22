@@ -14,6 +14,7 @@
 #define LCD_PERIOD_MS 1
 #define BUTTON_TASK_PERIOD_MS 5
 #define TILT_SENSOR_PERIOD_MS 100
+
 #define RADIANS_TO_DEGREES 57.2957795f
 
 #define TM1637_CLK_PIN_1 6 
@@ -127,6 +128,7 @@ static void lcd_task(void *parameters)
     size_t color_index = 0;
     TickType_t last_wake = xTaskGetTickCount();
     color_lcd_display_number(count, lcd_colors1[color_index]);
+    color_lcd_display_text("abcd",lcd_colors1[color_index]);
 
     (void)parameters;
     while (true) {

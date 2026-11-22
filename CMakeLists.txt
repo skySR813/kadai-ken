@@ -54,10 +54,10 @@ include("${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2350_ARM_NTZ/FreeRTOS
 # Add executable. Default name is the project name, version 0.1
 
 add_executable(kadai_test_main
-        kadai_test_main.c
-        tm1637.c
-        color_lcd.c
-        LSM6DSV16X.c
+        src/kadai_test_main.c
+        src/tm1637.c
+        src/color_lcd.c
+        src/LSM6DSV16X.c
 )
 
 pico_set_program_name(kadai_test_main "kadai_test_main")
@@ -73,7 +73,7 @@ target_link_libraries(kadai_test_main
 
 # Add the standard include files to the build
 target_include_directories(kadai_test_main PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/include
 )
 
 # Add any user requested libraries

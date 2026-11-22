@@ -17,6 +17,7 @@
 #define DIGIT_HEIGHT 7
 #define DIGIT_GAP 1
 #define DIGITS_TO_DISPLAY 4
+#define TEXT_MAX_CHARS 4
 
 static const uint8_t digit_glyphs[10][DIGIT_HEIGHT] = {
     {0x0e, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0e},
@@ -29,6 +30,35 @@ static const uint8_t digit_glyphs[10][DIGIT_HEIGHT] = {
     {0x1f, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08},
     {0x0e, 0x11, 0x11, 0x0e, 0x11, 0x11, 0x0e},
     {0x0e, 0x11, 0x11, 0x0f, 0x01, 0x01, 0x0e}
+};
+
+static const uint8_t alphabet_glyphs[26][DIGIT_HEIGHT] = {
+    {0x0e, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11}, // A
+    {0x1e, 0x11, 0x11, 0x1e, 0x11, 0x11, 0x1e}, // B
+    {0x0e, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0e}, // C
+    {0x1e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1e}, // D
+    {0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x1f}, // E
+    {0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x10}, // F
+    {0x0e, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0f}, // G
+    {0x11, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11}, // H
+    {0x0e, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0e}, // I
+    {0x07, 0x02, 0x02, 0x02, 0x12, 0x12, 0x0c}, // J
+    {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11}, // K
+    {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1f}, // L
+    {0x11, 0x1b, 0x15, 0x15, 0x11, 0x11, 0x11}, // M
+    {0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11}, // N
+    {0x0e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e}, // O
+    {0x1e, 0x11, 0x11, 0x1e, 0x10, 0x10, 0x10}, // P
+    {0x0e, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0d}, // Q
+    {0x1e, 0x11, 0x11, 0x1e, 0x14, 0x12, 0x11}, // R
+    {0x0f, 0x10, 0x10, 0x0e, 0x01, 0x01, 0x1e}, // S
+    {0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}, // T
+    {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e}, // U
+    {0x11, 0x11, 0x11, 0x11, 0x11, 0x0a, 0x04}, // V
+    {0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0e}, // W
+    {0x11, 0x11, 0x0a, 0x04, 0x0a, 0x11, 0x11}, // X
+    {0x11, 0x11, 0x0a, 0x04, 0x04, 0x04, 0x04}, // Y
+    {0x1f, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1f}  // Z
 };
 
 static void lcd_write_command(uint8_t command)
@@ -129,6 +159,56 @@ static bool lcd_pixel_is_digit(uint16_t x, uint16_t y, uint16_t number)
     return (digit_glyphs[digit][row] & (1u << (DIGIT_WIDTH - 1 - column))) != 0;
 }
 
+static bool lcd_pixel_is_text(uint16_t x, uint16_t y, const char *text)
+{
+    if (text == NULL) {
+        return false;
+    }
+
+    const uint16_t digit_stride = (DIGIT_WIDTH + DIGIT_GAP) * DIGIT_SCALE;
+    const uint16_t text_width =
+        (TEXT_MAX_CHARS * DIGIT_WIDTH + (TEXT_MAX_CHARS - 1) * DIGIT_GAP) *
+        DIGIT_SCALE;
+    const uint16_t text_height = DIGIT_HEIGHT * DIGIT_SCALE;
+    const uint16_t origin_x = (LCD_WIDTH - text_width) / 2;
+    const uint16_t origin_y = (LCD_HEIGHT - text_height) / 2;
+
+    if (x < origin_x || x >= origin_x + text_width ||
+        y < origin_y || y >= origin_y + text_height) {
+        return false;
+    }
+
+    const uint16_t local_x = x - origin_x;
+    const uint16_t column = (local_x / DIGIT_SCALE) % (DIGIT_WIDTH + DIGIT_GAP);
+    const uint16_t char_index = local_x / digit_stride;
+    const uint16_t row = (y - origin_y) / DIGIT_SCALE;
+
+    if (column >= DIGIT_WIDTH) {
+        return false;
+    }
+
+    char character = text[char_index];
+    if (character == '\0') {
+        return false;
+    }
+    if (character >= 'a' && character <= 'z') {
+        character = (char)(character - 'a' + 'A');
+    }
+    if (character >= 'A' && character <= 'Z') {
+        const uint8_t glyph_index = (uint8_t)(character - 'A');
+        return (alphabet_glyphs[glyph_index][row] &
+                (1u << (DIGIT_WIDTH - 1 - column))) != 0;
+    }
+    if (character >= '0' && character <= '9') {
+        const uint8_t digit = (uint8_t)(character - '0');
+        return (digit_glyphs[digit][row] &
+                (1u << (DIGIT_WIDTH - 1 - column))) != 0;
+    }
+    return false;
+}
+
+
+//円
 static bool lcd_pixel_in_circle(uint16_t x, uint16_t y)
 {
     const int32_t dx = (int32_t)x - 58;
@@ -136,6 +216,7 @@ static bool lcd_pixel_in_circle(uint16_t x, uint16_t y)
     return dx * dx + dy * dy <= 23 * 23;
 }
 
+//四角形
 static bool lcd_pixel_on_rectangle(uint16_t x, uint16_t y)
 {
     const uint16_t left = 145;
@@ -149,12 +230,15 @@ static bool lcd_pixel_on_rectangle(uint16_t x, uint16_t y)
             y - top < border || bottom - y < border);
 }
 
-static int32_t triangle_edge(
-    int32_t x1, int32_t y1, int32_t x2, int32_t y2, int32_t x, int32_t y)
+
+//三角形エッジ判定
+static int32_t triangle_edge(int32_t x1, int32_t y1, int32_t x2, int32_t y2, int32_t x, int32_t y)
 {
     return (x - x1) * (y2 - y1) - (y - y1) * (x2 - x1);
 }
 
+
+//三角形
 static bool lcd_pixel_in_triangle(uint16_t x, uint16_t y)
 {
     const int32_t px = x;
@@ -167,6 +251,27 @@ static bool lcd_pixel_in_triangle(uint16_t x, uint16_t y)
            (edge1 <= 0 && edge2 <= 0 && edge3 <= 0);
 }
 
+//矢印➡
+static bool lcd_pixel_on_arrow(uint16_t x, uint16_t y){
+
+    bool shaft =  x >= 50 && x <= 160 && y >= 145 && y <= 155;
+
+    const int32_t px = x;
+    const int32_t py = y;
+
+    //先端➡左上➡左下➡先端の順番
+    const int32_t edge1 = triangle_edge(190,150, 160,140, px,py);
+    const int32_t edge2 = triangle_edge(160,140, 160,160, px,py);
+    const int32_t edge3 = triangle_edge(160,160, 190,150, px,py);
+
+    bool head = (edge1 >= 0 && edge2 >= 0 && edge3 >= 0) || (edge1 <= 0 && edge2 <= 0 && edge3 <= 0);
+
+    return shaft || head;
+
+    
+}
+
+/*
 static bool lcd_pixel_on_line(uint16_t x, uint16_t y){
     const int32_t x1 = 50;
     const int32_t y1 = 150;
@@ -177,19 +282,11 @@ static bool lcd_pixel_on_line(uint16_t x, uint16_t y){
     const int32_t cross = (x - x1) * dy - (y - y1) * dx;
     return cross == 0 && x >= x1 && x <= x2 && y >= y1 && y <= y2;
 }
+*/
 
-static bool lcd_pixel_on_arrow(uint16_t x, uint16_t y){
-    const int32_t x1 = 50;
-    const int32_t x2 = 190;
-    const int32_t x3 = 100;
-    const int32_t y1 = 140;
-    const int32_t y2 = 160;
-    const int32_t y3 = 150;
-    const int32_t dx = x2 - x1;
-    const int32_t dy = 
-}
 
-static uint16_t lcd_pixel_color(uint16_t x, uint16_t y, uint16_t number, uint16_t number_color)
+static uint16_t lcd_pixel_color(
+    uint16_t x, uint16_t y, uint16_t number, uint16_t number_color, const char *text)
 {
     if (lcd_pixel_in_circle(x, y)) {
         return 0x07FF;
@@ -203,10 +300,19 @@ static uint16_t lcd_pixel_color(uint16_t x, uint16_t y, uint16_t number, uint16_
         //return number_color + 3;
         return 0xFFE0;
     }
+    /*
     if (lcd_pixel_on_line(x, y)) {
         return 0xF81F;
     }
-    if (lcd_pixel_is_digit(x, y, number)) {
+    */
+    if(lcd_pixel_on_arrow(x,y)){
+        return 0x231F;
+    }
+    if (text != NULL) {
+        if (lcd_pixel_is_text(x, y, text)) {
+            return number_color;
+        }
+    } else if (lcd_pixel_is_digit(x, y, number)) {
         return number_color;
     }
     return 0x0000;
@@ -238,7 +344,22 @@ void color_lcd_display_number(uint16_t number, uint16_t color)
     lcd_set_window(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1);
     for (uint16_t y = 0; y < LCD_HEIGHT; ++y) {
         for (uint16_t x = 0; x < LCD_WIDTH; ++x) {
-            const uint16_t pixel = lcd_pixel_color(x, y, number, color);
+            const uint16_t pixel = lcd_pixel_color(x, y, number, color, NULL);
+            line[x * 2] = (uint8_t)(pixel >> 8);
+            line[x * 2 + 1] = (uint8_t)pixel;
+        }
+        lcd_write_data(line, sizeof(line));
+    }
+}
+
+void color_lcd_display_text(const char *text, uint16_t color)
+{
+    uint8_t line[LCD_WIDTH * 2];
+
+    lcd_set_window(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1);
+    for (uint16_t y = 0; y < LCD_HEIGHT; ++y) {
+        for (uint16_t x = 0; x < LCD_WIDTH; ++x) {
+            const uint16_t pixel = lcd_pixel_color(x, y, 0, color, text);
             line[x * 2] = (uint8_t)(pixel >> 8);
             line[x * 2 + 1] = (uint8_t)pixel;
         }
