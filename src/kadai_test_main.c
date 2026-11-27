@@ -9,11 +9,10 @@
 #include "tm1637.h"
 #include "LSM6DSV16X.h"
 
-#define SEVEN_SEGMENT1_PERIOD_MS 100
-#define SEVEN_SEGMENT2_PERIOD_MS 100
 #define LCD_PERIOD_MS 1
 #define BUTTON_TASK_PERIOD_MS 5
-#define TILT_SENSOR_PERIOD_MS 100
+#define TILT_SENSOR_PERIOD_MS 200
+
 
 #define RADIANS_TO_DEGREES 57.2957795f
 
@@ -30,12 +29,15 @@
 #define BUTTON_NUM 3
 
 QueueHandle_t button_queue;
+QueueHandle_t tilt_queue;
 
 
 static lsm6dsv16x_t sensor;
 
-static volatile int16_t tilt_x_degrees;
-static volatile int16_t tilt_y_degrees;
+typedef struct{
+  int16_t tilt_x_degrees;
+  int16_t tilt_y_degrees;
+} tilt_xy_t;
 
 static tm1637_config_t tm1637_config_1 = {
     .clk_pin = TM1637_CLK_PIN_1,
@@ -50,47 +52,22 @@ static tm1637_config_t tm1637_config_2 = {
 
 
 
-typedef struct {
-    const tm1637_config_t *display;
-    TickType_t period;
-    volatile int16_t *angle;
-} seven_segment_task_config_t;
-
-
-static seven_segment_task_config_t seven_segment_task_config_1 = {
-    .display = &tm1637_config_1,
-    .period = pdMS_TO_TICKS(SEVEN_SEGMENT1_PERIOD_MS),
-    .angle = &tilt_x_degrees
-};
-
-static seven_segment_task_config_t seven_segment_task_config_2 = {
-    .display = &tm1637_config_2,
-    .period = pdMS_TO_TICKS(SEVEN_SEGMENT2_PERIOD_MS),
-    .angle = &tilt_y_degrees
-};
-
 typedef struct { 
     uint8_t button_pin;
     bool is_pressed;
 }button_Event_t;
 
-static int16_t get_tilt_angle(const volatile int16_t *angle)
-{
-    int16_t value;
-    taskENTER_CRITICAL();
-    value = *angle;
-    taskEXIT_CRITICAL();
-    return value;
-}
-
 static void seven_segment_task(void *parameters)
 {
-    const seven_segment_task_config_t *config = parameters;
-    TickType_t last_wake = xTaskGetTickCount();
+    tilt_xy_t tilt;
+    
 
+    (void)parameters;
     while (true) {
-        tm1637_display_number(config->display, get_tilt_angle(config->angle));
-        vTaskDelayUntil(&last_wake, config->period);
+        if (xQueueReceive(tilt_queue, &tilt, portMAX_DELAY) == pdPASS) {
+            tm1637_display_number(&tm1637_config_1, tilt.tilt_x_degrees);
+            tm1637_display_number(&tm1637_config_2, tilt.tilt_y_degrees);
+        }
     }
 }
 
@@ -104,10 +81,13 @@ static void tilt_sensor_task(void *parameters)
         if (lsm6dsv16x_read_sensor(imu, &readings)) {
             const float tilt_x = atan2f(readings.ay, readings.az) * RADIANS_TO_DEGREES;
             const float tilt_y = atan2f(-readings.ax, sqrtf(readings.ay * readings.ay + readings.az * readings.az)) * RADIANS_TO_DEGREES;
-            taskENTER_CRITICAL();
-            tilt_x_degrees = (int16_t)lroundf(tilt_x);
-            tilt_y_degrees = (int16_t)lroundf(tilt_y);
-            taskEXIT_CRITICAL();
+            const tilt_xy_t tilt = {
+                .tilt_x_degrees = (int16_t)lroundf(tilt_x),
+                .tilt_y_degrees = (int16_t)lroundf(tilt_y)
+            };
+            xQueueOverwrite(tilt_queue, &tilt);
+            printf("sensor x:%f sensor y:%f sensor z:%f\n",readings.ax,readings.ay,readings.az);
+            printf("tilt x:%f tilt y:%f\n",tilt_x,tilt_y);
         } else {
             printf("Failed to read LSM6DSV16X\n");
         }
@@ -192,8 +172,9 @@ int main(void)
     color_lcd_init();
 
     button_queue = xQueueCreate(10, sizeof(button_Event_t));
-    if (button_queue == NULL) {
-        printf("Failed to create button queue\n");
+    tilt_queue = xQueueCreate(1, sizeof(tilt_xy_t));
+    if (button_queue == NULL || tilt_queue == NULL) {
+        printf("Failed to create queues\n");
         while (true) {
             tight_loop_contents();
         }
@@ -206,10 +187,9 @@ int main(void)
         }
     }
 
-    if (xTaskCreate(seven_segment_task, "seven-segment-1", 512, &seven_segment_task_config_1,tskIDLE_PRIORITY + 2, NULL) != pdPASS ||
-        xTaskCreate(seven_segment_task, "seven-segment-2", 512, &seven_segment_task_config_2,tskIDLE_PRIORITY + 2, NULL) != pdPASS ||
+    if (xTaskCreate(seven_segment_task, "seven-segment", 512, NULL,tskIDLE_PRIORITY + 2, NULL) != pdPASS ||
         xTaskCreate(lcd_task, "lcd", 1024, NULL,tskIDLE_PRIORITY + 1, NULL) != pdPASS || 
-        xTaskCreate(tilt_sensor_task, "tilt-sensor", 1024, &sensor,tskIDLE_PRIORITY + 3, NULL) != pdPASS ||
+        xTaskCreate(tilt_sensor_task, "tilt-sensor", 1024, &sensor,tskIDLE_PRIORITY + 2, NULL) != pdPASS ||
         xTaskCreate(button_task, "button", 512, NULL, tskIDLE_PRIORITY + 1, NULL) != pdPASS) {
         printf("Failed to create tasks\n");
         while (true) {

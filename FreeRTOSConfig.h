@@ -70,6 +70,9 @@
 #define INCLUDE_xTaskGetCurrentTaskHandle        1
 #define INCLUDE_eTaskGetState                    1
 #define INCLUDE_xTimerPendFunctionCall           1
+#define INCLUDE_uxTaskGetStackHighWaterMark2     1
+
+#define configRECORD_STACK_HIGH_ADDRESS       1
 
 #if PICO_RP2350
 #define configENABLE_MPU                        0

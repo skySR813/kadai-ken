@@ -10,9 +10,13 @@
 #define REG_WHO_AM_I 0x0F
 #define REG_CTRL1 0x10
 #define REG_CTRL2 0x11
+#define REG_CTRL3 0x12
 #define REG_CTRL6 0x15
 #define REG_CTRL8 0x17
 #define REG_OUTX_L_G 0x22
+
+#define CTRL3_BDU (1u << 6)
+#define CTRL3_IF_INC (1u << 2)
 
 static bool read_registers(
     const lsm6dsv16x_t *sensor, uint8_t start_register, uint8_t *buffer, size_t length)
@@ -81,7 +85,8 @@ bool lsm6dsv16x_init(
         return false;
     }
 
-    if (!write_register(sensor, REG_CTRL1, 0x09) ||
+    if (!write_register(sensor, REG_CTRL3, CTRL3_BDU | CTRL3_IF_INC) ||
+        !write_register(sensor, REG_CTRL1, 0x09) ||
         !write_register(sensor, REG_CTRL2, 0x09) ||
         !write_register(sensor, REG_CTRL6, 0x04) ||
         !write_register(sensor, REG_CTRL8, 0x82)) {
